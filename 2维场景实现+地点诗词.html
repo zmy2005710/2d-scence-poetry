@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>唐代长安城数字复原系统</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #d4af37; /* 金色 */
+            --secondary-color: #b8860b; /* 深金色 */
+            --accent-color: #dc143c; /* 深红色 */
+            --highlight-color: #ff6b6b; /* 亮红色 */
+            --bg-color: #fdf6e3; /* 米黄色 */
+            --panel-bg: #fff8dc; /* 淡米色 */
+            --wall-color: #cd853f; /* 沙棕色 */
+            --roof-color: #8b0000; /* 深红色屋顶 */
+            --palace-color: #b22222; /* 宫殿红 */
+            --golden-roof: #ffd700; /* 金色屋顶 */
+        }
+        
+        body {
+            margin: 0;
+            font-family: 'SimSun', '宋体', serif;
+            background: linear-gradient(135deg, var(--bg-color) 0%, #f5deb3 50%, #ffeaa7 100%);
+            color: #333;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .left-panel {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            border-right: 3px solid var(--primary-color);
+        }
+        
+        .right-panel {
+            flex: 1;
+            padding: 20px;
+            background: var(--panel-bg);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #map {
+            height: 50%;
+            border-bottom: 3px solid var(--primary-color);
+        }
+        
+        #scene2d {
+            height: 50%;
+            position: relative;
+            background: linear-gradient(45deg, #faf0e6 0%, #f5deb3 50%, #ffe4b5 100%);
+            overflow: hidden;
+        }
+        
+        .building {
+            cursor: pointer;
+            transition: all 0.4s ease;
+            stroke: var(--wall-color);
+            stroke-width: 2;
+        }
+        
+        .building:hover {
+            fill: var(--highlight-color) !important;
+            transform: scale(1.03);
+            filter: drop-shadow(0 0 8px rgba(212, 175, 55, 0.6));
+        }
+        
+        .building.selected {
+            fill: var(--secondary-color) !important;
+            stroke: var(--primary-color);
+            stroke-width: 4;
+            filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.8));
+        }
+        
+        #timeline-container {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255, 248, 220, 0.8);
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.2);
+        }
+        
+        #year-slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+        
+        .info-panel {
+            background: rgba(255, 248, 220, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.1);
+            flex: 1;
+        }
+        
+        .poem-card {
+            background: linear-gradient(135deg, #fff8dc 0%, #f0e68c 100%);
+            border-left: 5px solid var(--primary-color);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 0 10px 10px 0;
+            box-shadow: 0 2px 8px rgba(212, 175, 55, 0.2);
+            position: relative;
+        }
+        
+        .poem-title {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: var(--accent-color);
+            margin-bottom: 5px;
+        }
+        
+        .poem-author {
+            font-style: italic;
+            color: var(--secondary-color);
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+        
+        .poem-content {
+            font-size: 1em;
+            line-height: 1.6;
+            text-align: justify;
+        }
+        
+        .poem-nav {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        
+        .poem-nav-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        
+        .poem-nav-btn:hover {
+            background: var(--secondary-color);
+        }
+        
+        .poem-counter {
+            font-size: 0.8em;
+            color: #666;
+            align-self: center;
+        }
+        
+        .historical-event {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+            padding-top: 5px;
+            border-top: 1px dashed #ddd;
+        }
+        
+        .control-panel {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .btn:hover {
+            background: linear-gradient(135deg, #b8860b 0%, #8b6914 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        
+        .legend {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 10px;
+            font-size: 0.8em;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 248, 220, 0.5);
+            padding: 5px 10px;
+            border-radius: 15px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+            border: 2px solid #333;
+            border-radius: 3px;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background: linear-gradient(135deg, #fff8dc 0%, #fdf6e3 100%);
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 25px rgba(212, 175, 55, 0.3);
+        }
+        
+        .close-btn {
+            float: right;
+            font-size: 1.8em;
+            cursor: pointer;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+        
+        .building-detail {
+            display: none;
+            position: absolute;
+            background: rgba(255, 248, 220, 0.95);
+            padding: 12px 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
+            pointer-events: none;
+            z-index: 100;
+            border: 1px solid var(--primary-color);
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        /* 精美化的2D建筑样式 */
+        .building-palace {
+            fill: var(--palace-color);
+            stroke: var(--wall-color);
+            stroke-width: 3;
+        }
+        
+        .building-market {
+            fill: #228b22;
+            stroke: #006400;
+            stroke-width: 2;
+        }
+        
+        .building-temple {
+            fill: var(--accent-color);
+            stroke: #8b0000;
+            stroke-width: 2;
+        }
+        
+        .building-government {
+            fill: #daa520;
+            stroke: var(--secondary-color);
+            stroke-width: 2;
+        }
+        
+        /* 城墙样式 */
+        .city-wall {
+            fill: var(--wall-color);
+            stroke: var(--roof-color);
+            stroke-width: 5;
+        }
+        
+        /* 屋顶装饰 */
+        .roof-decoration {
+            fill: var(--golden-roof);
+            stroke: var(--primary-color);
+            stroke-width: 1;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            .left-panel, .right-panel {
+                flex: none;
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left-panel">
+            <!-- 地图容器 -->
+            <div id="map"></div>
+            
+            <!-- 2D场景容器 -->
+            <div id="scene2d">
+                <svg width="100%" height="100%" viewBox="0 0 800 600">
+                    <!-- 定义渐变和图案 -->
+                    <defs>
+                        <!-- 城墙渐变 -->
+                        <linearGradient id="wallGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#cd853f;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#8b7355;stop-opacity:1" />
+                        </linearGradient>
+                        
+                        <!-- 宫殿渐变 -->
+                        <linearGradient id="palaceGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#dc143c;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#b22222;stop-opacity:1" />
+                        </linearGradient>
+                        
+                        <!-- 市场渐变 -->
+                        <linearGradient id="marketGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#32cd32;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#228b22;stop-opacity:1" />
+                        </linearGradient>
+                        
+                        <!-- 寺庙渐变 -->
+                        <linearGradient id="templeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#8b0000;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#7b1fa2;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                    
+                    <!-- 背景云朵装饰 -->
+                    <g opacity="0.1">
+                        <ellipse cx="150" cy="80" rx="30" ry="15" fill="white"/>
+                        <ellipse cx="170" cy="75" rx="25" ry="12" fill="white"/>
+                        <ellipse cx="650" cy="100" rx="35" ry="18" fill="white"/>
+                        <ellipse cx="675" cy="95" rx="28" ry="14" fill="white"/>
+                    </g>
+                    
+                    <!-- 长安城城墙 -->
+                    <rect x="50" y="50" width="700" height="500" fill="url(#wallGradient)" class="city-wall" />
+                    
+                    <!-- 城墙装饰线条 -->
+                    <rect x="50" y="50" width="700" height="8" fill="var(--roof-color)" />
+                    <rect x="50" y="542" width="700" height="8" fill="var(--roof-color)" />
+                    
+                    <!-- 宫城 - 精美化 -->
+                    <rect id="palace" x="300" y="150" width="200" height="150" fill="url(#palaceGradient)" class="building building-palace" 
+                          data-name="大明宫" data-type="palace" data-era="tang" />
+                    
+                    <!-- 宫城屋顶装饰 -->
+                    <rect x="300" y="150" width="200" height="10" fill="var(--golden-roof)" class="roof-decoration" />
+                    <rect x="340" y="170" width="120" height="6" fill="var(--golden-roof)" class="roof-decoration" />
+                    
+                    <!-- 皇城 -->
+                    <rect x="300" y="300" width="200" height="100" fill="url(#marketGradient)" class="building building-government" 
+                          data-name="皇城" data-type="government" data-era="tang" />
+                    
+                    <!-- 皇城装饰 -->
+                    <rect x="300" y="300" width="200" height="6" fill="var(--secondary-color)" />
+                    
+                    <!-- 东市 -->
+                    <rect id="market-east" x="100" y="400" width="150" height="100" fill="url(#marketGradient)" class="building building-market" 
+                          data-name="东市" data-type="market" data-era="tang" />
+                    
+                    <!-- 东市装饰 -->
+                    <rect x="100" y="400" width="150" height="6" fill="#006400" />
+                    
+                    <!-- 西市 -->
+                    <rect id="market-west" x="550" y="400" width="150" height="100" fill="url(#marketGradient)" class="building building-market" 
+                          data-name="西市" data-type="market" data-era="tang" />
+                    
+                    <!-- 西市装饰 -->
+                    <rect x="550" y="400" width="150" height="6" fill="#006400" />
+                    
+                    <!-- 大慈恩寺 - 精美化 -->
+                    <rect id="temple" x="500" y="300" width="120" height="120" fill="url(#templeGradient)" class="building building-temple" 
+                          data-name="大慈恩寺" data-type="temple" data-era="tang" />
+                    
+                    <!-- 寺庙屋顶装饰 -->
+                    <rect x="500" y="300" width="120" height="8" fill="var(--golden-roof)" class="roof-decoration" />
+                    
+                    <!-- 兴庆宫 -->
+                    <rect id="xingqing" x="150" y="250" width="120" height="120" fill="url(#palaceGradient)" class="building building-palace" 
+                          data-name="兴庆宫" data-type="palace" data-era="tang" />
+                    
+                    <!-- 兴庆宫装饰 -->
+                    <rect x="150" y="250" width="120" height="8" fill="var(--golden-roof)" class="roof-decoration" />
+                    
+                    <!-- 城市网格道路 - 精美化 -->
+                    <g stroke="var(--wall-color)" stroke-width="2" stroke-dasharray="4,4" opacity="0.7">
+                        <line x1="50" y1="150" x2="750" y2="150" />
+                        <line x1="50" y1="250" x2="750" y2="250" />
+                        <line x1="50" y1="350" x2="750" y2="350" />
+                        <line x1="150" y1="50" x2="150" y2="550" />
+                        <line x1="300" y1="50" x2="300" y2="550" />
+                        <line x1="500" y1="50" x2="500" y2="550" />
+                        <line x1="650" y1="50" x2="650" y2="550" />
+                    </g>
+                    
+                    <!-- 建筑标签 - 精美化 -->
+                    <text x="400" y="140" font-family="SimSun" font-size="16" text-anchor="middle" fill="var(--primary-color)" font-weight="bold">宫城</text>
+                    <text x="400" y="290" font-family="SimSun" font-size="16" text-anchor="middle" fill="var(--primary-color)" font-weight="bold">皇城</text>
+                    <text x="175" y="430" font-family="SimSun" font-size="16" text-anchor="middle" fill="var(--primary-color)" font-weight="bold">东市</text>
+                    <text x="625" y="430" font-family="SimSun" font-size="16" text-anchor="middle" fill="var(--primary-color)" font-weight="bold">西市</text>
+                    <text x="560" y="320" font-family="SimSun" font-size="16" text-anchor="middle" fill="var(--primary-color)" font-weight="bold">大慈恩寺</text>
+                    <text x="210" y="270" font-family="SimSun" font-size="16" text-anchor="middle" fill="var(--primary-color)" font-weight="bold">兴庆宫</text>
+                    
+                    <!-- 装饰性边框 -->
+                    <rect x="45" y="45" width="710" height="510" fill="none" stroke="var(--primary-color)" stroke-width="1" stroke-dasharray="10,5" opacity="0.3"/>
+                </svg>
+                <div class="building-detail" id="building-detail"></div>
+            </div>
+        </div>
+        
+        <div class="right-panel">
+            <div class="control-panel">
+                <button class="btn" id="reset-view">重置视图</button>
+                <button class="btn" id="about-btn">关于系统</button>
+            </div>
+            
+            <div id="timeline-container">
+                <h3>时间轴 (公元 <span id="current-year">618</span> 年)</h3>
+                <input type="range" id="year-slider" min="618" max="907" value="618" step="1">
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: linear-gradient(135deg, var(--palace-color) 0%, var(--secondary-color) 100%);"></div>
+                        <span>宫殿</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: linear-gradient(135deg, var(--market-gradient) 0%, #228b22 100%);"></div>
+                        <span>市场</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: linear-gradient(135deg, var(--temple-gradient) 0%, #7b1fa2 100%);"></div>
+                        <span>寺庙</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: linear-gradient(135deg, var(--market-gradient) 0%, var(--secondary-color) 100%);"></div>
+                        <span>官署</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="info-panel" id="building-info">
+                <h3>建筑信息</h3>
+                <p>点击地图上的建筑查看详细信息</p>
+            </div>
+            
+            <div class="info-panel" id="historical-events">
+                <h3>历史事件</h3>
+                <div id="events-list">
+                    <div class="historical-event">
+                        <strong>618年</strong> - 李渊建立唐朝，定都长安
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 关于模态框 -->
+    <div class="modal" id="about-modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-about">&times;</span>
+            <h2>唐代长安城数字复原系统</h2>
+            <p>本系统基于历史文献和考古发现，对唐代长安城进行数字化复原展示。长安城是当时世界上最大的城市之一，面积约84平方公里，人口超过百万。</p>
+            <p>系统功能：</p>
+            <ul>
+                <li>展示长安城整体布局和重要建筑</li>
+                <li>通过时间轴了解城市发展变迁</li>
+                <li>查看建筑详细信息和相关诗词</li>
+                <li>了解不同时期的历史事件</li>
+            </ul>
+            <p>数据来源：《两京新记》、《长安志》、《唐两京城坊考》等历史文献及现代考古研究成果。</p>
+            <p>© 2025 历史文化数字化研究中心</p>
+        </div>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // 历史事件数据
+        const historicalEvents = {
+            618: ["李渊建立唐朝，定都长安"],
+            626: ["玄武门之变，李世民登基为唐太宗"],
+            629: ["玄奘从长安出发西行取经"],
+            635: ["景教传入长安"],
+            690: ["武则天称帝，改国号为周"],
+            712: ["唐玄宗李隆基即位"],
+            755: ["安史之乱爆发"],
+            763: ["安史之乱平定"],
+            781: ["大秦景教流行中国碑立于长安"],
+            835: ["甘露之变"],
+            845: ["唐武宗灭佛"],
+            880: ["黄巢起义军攻入长安"],
+            907: ["唐朝灭亡"]
+        };
+
+        // 建筑诗词数据
+        const buildingPoems = {
+            "palace": [
+                {
+                    title: "清平调·其一",
+                    author: "李白",
+                    content: "云想衣裳花想容，春风拂槛露华浓。若非群玉山头见，会向瑶台月下逢。"
+                },
+                {
+                    title: "大明宫早朝",
+                    author: "王维",
+                    content: "绛帻鸡人报晓筹，尚衣方进翠云裘。九天阊阖开宫殿，万国衣冠拜冕旒。"
+                },
+                {
+                    title: "宫词",
+                    author: "白居易",
+                    content: "泪尽罗巾梦不成，夜深前殿按歌声。红颜未老恩先断，斜倚薰笼坐到明。"
+                },
+                {
+                    title: "早朝大明宫",
+                    author: "贾至",
+                    content: "银烛朝天紫陌长，禁城春色晓苍苍。千条弱柳垂青琐，百啭流莺绕建章。"
+                }
+            ],
+            "market-east": [
+                {
+                    title: "长安秋望",
+                    author: "杜牧",
+                    content: "楼倚霜树外，镜天无一毫。南山与秋色，气势两相高。"
+                },
+                {
+                    title: "长安春望",
+                    author: "卢纶",
+                    content: "东风吹雨过青山，却望千门草色闲。家在梦中何日到，春生江上几人还。"
+                },
+                {
+                    title: "长安秋夜",
+                    author: "李德裕",
+                    content: "内宫传诏问戎机，载笔金銮夜始归。万户千门皆寂寂，月中清露点朝衣。"
+                }
+            ],
+            "market-west": [
+                {
+                    title: "少年行",
+                    author: "王维",
+                    content: "新丰美酒斗十千，咸阳游侠多少年。相逢意气为君饮，系马高楼垂柳边。"
+                },
+                {
+                    title: "西市行",
+                    author: "张籍",
+                    content: "金陵向西贾客多，船中生长乐风波。欲发移船近江口，船头祭神各浇酒。"
+                },
+                {
+                    title: "胡商",
+                    author: "元稹",
+                    content: "求珠驾沧海，采玉上荆衡。北买党项马，西擒吐蕃鹦。"
+                }
+            ],
+            "temple": [
+                {
+                    title: "题慈恩寺塔",
+                    author: "章八元",
+                    content: "十层突兀在虚空，四十门开面面风。却怪鸟飞平地上，自惊人语半天中。"
+                },
+                {
+                    title: "与高适薛据同登慈恩寺浮图",
+                    author: "岑参",
+                    content: "塔势如涌出，孤高耸天宫。登临出世界，磴道盘虚空。突兀压神州，峥嵘如鬼工。"
+                },
+                {
+                    title: "慈恩寺避暑",
+                    author: "李远",
+                    content: "香荷疑散麝，风铎似调琴。不觉清凉晚，归人满柳阴。"
+                }
+            ],
+            "xingqing": [
+                {
+                    title: "清平调·其二",
+                    author: "李白",
+                    content: "一枝红艳露凝香，云雨巫山枉断肠。借问汉宫谁得似，可怜飞燕倚新妆。"
+                },
+                {
+                    title: "兴庆池侍宴应制",
+                    author: "李乂",
+                    content: "神池泛滥水盈科，仙跸纡徐步辇过。纵棹洄沿萍溜合，开轩眺赏麦风和。"
+                },
+                {
+                    title: "龙池",
+                    author: "李商隐",
+                    content: "龙池赐酒敞云屏，羯鼓声高众乐停。夜半宴归宫漏永，薛王沉醉寿王醒。"
+                }
+            ],
+            "government": [
+                {
+                    title: "早朝大明宫",
+                    author: "杜甫",
+                    content: "五夜漏声催晓箭，九重春色醉仙桃。旌旗日暖龙蛇动，宫殿风微燕雀高。"
+                },
+                {
+                    title: "退朝口号",
+                    author: "杜甫",
+                    content: "昼刻传呼浅，春旗簇仗齐。退朝花底散，归院柳边迷。"
+                },
+                {
+                    title: "宫词",
+                    author: "顾况",
+                    content: "玉楼天半起笙歌，风送宫嫔笑语和。月殿影开闻夜漏，水晶帘卷近秋河。"
+                }
+            ]
+        };
+
+        // 建筑数据
+        const buildingData = {
+            "palace": {
+                name: "大明宫",
+                type: "宫殿",
+                era: "唐代",
+                description: "唐代皇家宫殿，位于长安城北部的龙首原上，是当时世界上面积最大的宫殿建筑群。始建于唐太宗贞观八年(634年)，原名永安宫，后改称大明宫。大明宫是唐朝的政治中心和国家象征，自唐高宗起，唐朝的帝王们大都在这里居住和处理朝政。",
+                history: "634年始建，662年大规模扩建，896年毁于战火"
+            },
+            "market-east": {
+                name: "东市",
+                type: "市场",
+                era: "唐代",
+                description: "长安两大市场之一，面积约1平方公里，设有220个行业，商铺林立。东市主要服务于达官贵人，商品以奢侈品为主。",
+                history: "隋朝始建，唐朝沿用并发展"
+            },
+            "market-west": {
+                name: "西市",
+                type: "市场",
+                era: "唐代",
+                description: "国际性贸易市场，有大量波斯、大食等国商人，是丝绸之路的重要节点。西市商品种类繁多，包括来自西域的香料、珠宝、马匹等。",
+                history: "隋朝始建，唐朝达到鼎盛"
+            },
+            "temple": {
+                name: "大慈恩寺",
+                type: "寺庙",
+                era: "唐代",
+                description: "玄奘法师主持修建的佛寺，大雁塔位于寺内，是佛教传入中国的象征之一。大慈恩寺是唐代长安城内最著名、最宏丽的佛寺之一。",
+                history: "648年建寺，652年建大雁塔"
+            },
+            "xingqing": {
+                name: "兴庆宫",
+                type: "宫殿",
+                era: "唐代",
+                description: "唐玄宗时期的主要政治活动场所，花萼相辉楼是当时最著名的宴会场所。兴庆宫原是唐玄宗李隆基为临淄王时的藩邸，后改建为宫。",
+                history: "714年改建为宫，756年后逐渐衰落"
+            },
+            "government": {
+                name: "皇城",
+                type: "官署",
+                era: "唐代",
+                description: "中央官署所在地，包含尚书省、中书省、门下省等六部机构。皇城是唐朝中央政府办公的地方，也是长安城的重要组成部分。",
+                history: "隋朝始建，唐朝沿用并完善"
+            }
+        };
+
+        // 初始化地图
+        const map = L.map('map', {
+            center: [34.28, 108.95],
+            zoom: 12,
+            attributionControl: false
+        });
+        
+        // 添加底图
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // 添加长安城轮廓
+        const changanOutline = L.polygon([
+            [34.32, 108.87], [34.32, 109.03], [34.24, 109.03], [34.24, 108.87]
+        ], {
+            color: '#d4af37',
+            fillColor: '#f8f1e0',
+            fillOpacity: 0.3,
+            weight: 3
+        }).addTo(map);
+        
+        // 添加重要建筑标记
+        const palace = L.marker([34.29, 108.96], {
+            icon: L.divIcon({
+                className: 'map-icon',
+                html: '<i class="fas fa-landmark" style="color: #d4af37; font-size: 20px;"></i>',
+                iconSize: [25, 25]
+            })
+        }).bindPopup("大明宫").addTo(map);
+        
+        const marketEast = L.marker([34.26, 108.98], {
+            icon: L.divIcon({
+                className: 'map-icon',
+                html: '<i class="fas fa-store" style="color: #32cd32; font-size: 20px;"></i>',
+                iconSize: [20, 20]
+            })
+        }).bindPopup("东市").addTo(map);
+        
+        const marketWest = L.marker([34.26, 108.92], {
+            icon: L.divIcon({
+                className: 'map-icon',
+                html: '<i class="fas fa-store" style="color: #32cd32; font-size: 20px;"></i>',
+                iconSize: [20, 20]
+            })
+        }).bindPopup("西市").addTo(map);
+        
+        const temple = L.marker([34.22, 108.96], {
+            icon: L.divIcon({
+                className: 'map-icon',
+                html: '<i class="fas fa-place-of-worship" style="color: #dc143c; font-size: 20px;"></i>',
+                iconSize: [20, 20]
+            })
+        }).bindPopup("大慈恩寺").addTo(map);
+
+        // 建筑点击事件
+        const buildings = document.querySelectorAll('.building');
+        const buildingInfoPanel = document.getElementById('building-info');
+        const buildingDetail = document.getElementById('building-detail');
+        
+        // 存储每个建筑的当前诗词索引
+        const buildingPoemIndex = {};
+        
+        // 初始化诗词索引
+        Object.keys(buildingPoems).forEach(buildingId => {
+            buildingPoemIndex[buildingId] = 0;
+        });
+        
+        buildings.forEach(building => {
+            // 鼠标悬停显示建筑名称
+            building.addEventListener('mousemove', function(e) {
+                const name = this.getAttribute('data-name');
+                buildingDetail.textContent = name;
+                buildingDetail.style.display = 'block';
+                buildingDetail.style.left = (e.clientX + 10) + 'px';
+                buildingDetail.style.top = (e.clientY + 10) + 'px';
+            });
+            
+            building.addEventListener('mouseout', function() {
+                buildingDetail.style.display = 'none';
+            });
+            
+            // 点击显示详细信息
+            building.addEventListener('click', function() {
+                // 移除所有选中状态
+                buildings.forEach(b => b.classList.remove('selected'));
+                
+                // 添加当前选中状态
+                this.classList.add('selected');
+                
+                // 获取建筑数据
+                const id = this.id;
+                const data = buildingData[id];
+                const poems = buildingPoems[id];
+                const currentIndex = buildingPoemIndex[id] || 0;
+                
+                // 更新信息面板
+                buildingInfoPanel.innerHTML = `
+                    <h3>${data.name}</h3>
+                    <p><strong>类型：</strong>${data.type}</p>
+                    <p><strong>朝代：</strong>${data.era}</p>
+                    <p><strong>历史：</strong>${data.history}</p>
+                    <div class="poem-card">
+                        <div class="poem-title">${poems[currentIndex].title}</div>
+                        <div class="poem-author">${poems[currentIndex].author}</div>
+                        <div class="poem-content">${poems[currentIndex].content}</div>
+                        <div class="poem-nav">
+                            <button class="poem-nav-btn" onclick="prevPoem('${id}')">上一首</button>
+                            <span class="poem-counter">${currentIndex + 1}/${poems.length}</span>
+                            <button class="poem-nav-btn" onclick="nextPoem('${id}')">下一首</button>
+                        </div>
+                    </div>
+                    <p>${data.description}</p>
+                `;
+            });
+        });
+
+        // 诗词导航函数
+        window.prevPoem = function(buildingId) {
+            const poems = buildingPoems[buildingId];
+            let currentIndex = buildingPoemIndex[buildingId] || 0;
+            currentIndex = (currentIndex - 1 + poems.length) % poems.length;
+            buildingPoemIndex[buildingId] = currentIndex;
+            
+            // 重新显示建筑信息
+            const building = document.getElementById(buildingId);
+            building.click();
+        };
+        
+        window.nextPoem = function(buildingId) {
+            const poems = buildingPoems[buildingId];
+            let currentIndex = buildingPoemIndex[buildingId] || 0;
+            currentIndex = (currentIndex + 1) % poems.length;
+            buildingPoemIndex[buildingId] = currentIndex;
+            
+            // 重新显示建筑信息
+            const building = document.getElementById(buildingId);
+            building.click();
+        };
+
+        // 时间轴滑块事件
+        const yearSlider = document.getElementById('year-slider');
+        const currentYearDisplay = document.getElementById('current-year');
+        const eventsList = document.getElementById('events-list');
+        
+        yearSlider.addEventListener('input', function() {
+            const year = this.value;
+            currentYearDisplay.textContent = year;
+            
+            // 更新历史事件
+            updateHistoricalEvents(year);
+        });
+        
+        function updateHistoricalEvents(year) {
+            eventsList.innerHTML = '';
+            
+            if (historicalEvents[year]) {
+                historicalEvents[year].forEach(event => {
+                    const eventElement = document.createElement('div');
+                    eventElement.className = 'historical-event';
+                    eventElement.innerHTML = `<strong>${year}年</strong> - ${event}`;
+                    eventsList.appendChild(eventElement);
+                });
+            } else {
+                const noEventElement = document.createElement('div');
+                noEventElement.className = 'historical-event';
+                noEventElement.textContent = `暂无${year}年的历史事件记录`;
+                eventsList.appendChild(noEventElement);
+            }
+        }
+
+        // 关于按钮事件
+        const aboutBtn = document.getElementById('about-btn');
+        const aboutModal = document.getElementById('about-modal');
+        const closeAbout = document.getElementById('close-about');
+        
+        aboutBtn.addEventListener('click', function() {
+            aboutModal.style.display = 'flex';
+        });
+        
+        closeAbout.addEventListener('click', function() {
+            aboutModal.style.display = 'none';
+        });
+        
+        window.addEventListener('click', function(event) {
+            if (event.target === aboutModal) {
+                aboutModal.style.display = 'none';
+            }
+        });
+
+        // 重置视图按钮
+        document.getElementById('reset-view').addEventListener('click', function() {
+            // 重置地图视图
+            map.setView([34.28, 108.95], 12);
+            
+            // 清除建筑选择
+            buildings.forEach(b => b.classList.remove('selected'));
+            
+            // 重置信息面板
+            buildingInfoPanel.innerHTML = `
+                <h3>建筑信息</h3>
+                <p>点击地图上的建筑查看详细信息</p>
+            `;
+            
+            // 重置时间轴
+            yearSlider.value = 618;
+            currentYearDisplay.textContent = 618;
+            updateHistoricalEvents(618);
+            
+            // 重置诗词索引
+            Object.keys(buildingPoemIndex).forEach(key => {
+                buildingPoemIndex[key] = 0;
+            });
+        });
+
+        // 初始化历史事件
+        updateHistoricalEvents(618);
+    </script>
+</body>
+</html>
